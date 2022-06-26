@@ -12,19 +12,23 @@ class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, C):
         super(MLP, self).__init__()
         self.input = nn.Linear(input_dim, hidden_dim)
-        self.activation1 = nn.ReLU()
+        self.input_activation = nn.ReLU()
         self.linear1 = nn.Linear(hidden_dim, hidden_dim)
+        self.activation1 = nn.ReLU()
+        self.linear2 = nn.Linear(hidden_dim, hidden_dim)
         self.activation2 = nn.ReLU()
         self.output_fc = nn.Linear(hidden_dim, C)
-        self.output_activation = nn.LogSoftmax(dim=1)
+        # self.output_activation = nn.LogSoftmax(dim=1)
 
     def forward(self, x):
         x = self.input(x)
-        x = self.activation1(x)
+        x = self.input_activation(x)
         x = self.linear1(x)
+        x = self.activation1(x)
+        x = self.linear2(x)
         x = self.activation2(x)
         x = self.output_fc(x)
-        x = self.output_activation(x)
+        # x = self.output_activation(x)
         return x
 
 
@@ -57,6 +61,7 @@ def model_predict(model, data):
 
     # Evaluate nn on test data and compare to true labels
     predicted_labels = model(X_test)
+    print("predicated_labels:\n {}".format(predicted_labels))
     # Back to numpy
     predicted_labels = predicted_labels.detach().numpy()
 
