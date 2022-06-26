@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import torch.nn.functional as F
 
 
 class MLP(nn.Module):
@@ -22,11 +23,11 @@ class MLP(nn.Module):
 
     def forward(self, x):
         x = self.input(x)
-        x = self.input_activation(x)
+        x = F.relu(x)
         x = self.linear1(x)
-        x = self.activation1(x)
+        x = F.relu(x)
         x = self.linear2(x)
-        x = self.activation2(x)
+        x = F.relu(x)
         x = self.output_fc(x)
         # x = self.output_activation(x)
         return x
