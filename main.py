@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt  # For general plotting
 import pandas
 import numpy as np
-import Airline_Funct as af
+# import Airline_Funct as af
 from sklearn.metrics import confusion_matrix
 import torch
 import torch.nn as nn
@@ -9,6 +9,7 @@ import torch.nn.functional as F
 import seaborn as sns
 from sklearn import preprocessing
 from IPython.display import display
+
 
 class MLP(nn.Module):
     # The nn.CrossEntropyLoss() loss function automatically performs a log_softmax() to
@@ -67,11 +68,11 @@ def train_model(model, data, labels, criterion, optimizer, num_epochs=25):
 
     # Plot loss vs epoch
     loss_vs_iteration = np.array(loss_vs_iteration)
-    plt.scatter(loss_vs_iteration[:,0], loss_vs_iteration[:,1])
+    plt.scatter(loss_vs_iteration[:, 0], loss_vs_iteration[:, 1])
     plt.xlabel("epoch")
     plt.ylabel("Loss function")
     plt.title("Value of the loss function")
-    plt.ylim((0,1))
+    plt.ylim((0, 1))
     plt.show()
 
     return model
@@ -126,7 +127,7 @@ num_classes = len(classes_str)
 
 # Load training set
 trainset = trainset_raw
-print("trainset:\n{}".format(trainset))
+# print("trainset:\n{}".format(trainset))
 # Get rid of useless columns
 del trainset["Unnamed: 0"]
 del trainset["id"]
@@ -151,15 +152,16 @@ trainset_y = trainset[:, len(trainset[0])-1]
 trainset_x = np.delete(trainset, len(trainset[0])-1, axis=1)
 
 # Temporary
-trainset_x = trainset_x[:,0:1]
+# trainset_x = trainset_x[:, 0:1]
 
 print("trainset_y:\n{}".format(trainset_y.shape))
 print("trainset_x:\n{}".format(trainset_x.shape))
+print("final trainset_x:\n{}".format(trainset_x))
 
 
 # Load testing set
 testset = testset_raw
-print("testset:\n{}".format(testset))
+# print("testset:\n{}".format(testset))
 # Get rid of useless columns
 del testset["Unnamed: 0"]
 del testset["id"]
@@ -185,11 +187,10 @@ testset_y = testset[:, len(testset[0])-1]
 testset_x = np.delete(testset, len(testset[0])-1, axis=1)
 print("testset_x shape:\n{}".format(testset_x.shape))
 
-testset_x = testset_x[:,0:1]
+# testset_x = testset_x[:, 0:1]
 
 print("testset_y:\n{}".format(testset_y.shape))
 print("testset_x:\n{}".format(testset_x.shape))
-
 
 
 # Visualize Dataset
@@ -205,12 +206,14 @@ print("testset_x:\n{}".format(testset_x.shape))
 
 # sns.pairplot(data=trainset_x_df)
 
-# NORMALIZE DATA
+# NORMALIZE DATA/FEATURE SCALING
 # plt.scatter(np.arange(0, len(trainset_x)), trainset_x[:, 0])
 # plt.show()
-# scaler = preprocessing.StandardScaler().fit(trainset_x)
-# X_scaled = scaler.transform(trainset_x)
-trainset_x = preprocessing.normalize(trainset_x, norm='l2')
+scaler = preprocessing.StandardScaler().fit(trainset_x)
+trainset_x = scaler.transform(trainset_x)
+scaler = preprocessing.StandardScaler().fit(testset_x)
+testset_x = scaler.transform(testset_x)
+# # trainset_x = preprocessing.normalize(trainset_x, norm='l2')
 # plt.scatter(np.arange(0, len(trainset_x)), trainset_x[:, 0])
 # plt.show()
 # trainset_x_df = pandas.DataFrame(trainset_x, columns=features[0:18])
@@ -228,8 +231,8 @@ input_dim = trainset_x.shape[1]
 n_hidden_neurons = 64
 output_dim = num_classes
 
-model = af.MLP(input_dim, n_hidden_neurons,
-               output_dim).to(torch.device('cuda'))
+model = MLP(input_dim, n_hidden_neurons,
+            output_dim).to(torch.device('cuda'))
 print(model)
 
 # Stochastic GD with learning rate and momentum hyperparameters
@@ -239,7 +242,7 @@ optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
 # the output when validating, on top of calculating the negative log-likelihood using
 # nn.NLLLoss(), while also being more stable numerically...
 criterion = nn.CrossEntropyLoss()
-num_epochs = 100
+num_epochs = 1000
 
 # Convert numpy structures to PyTorch tensors, as these are the data types required by the library
 # trainset_x_tensor = torch.FloatTensor(trainset_x).to(torch.device('cuda'))
@@ -262,15 +265,19 @@ num_epochs = 100
 # plt.show()
 
 # Trained model
-model = af.train_model(model, trainset_x, trainset_y, criterion,
-                       optimizer, num_epochs=num_epochs)
-testset_y_pred = af.model_predict(model, trainset_x)
+model = train_model(model, trainset_x, trainset_y, criterion,
+                    optimizer, num_epochs=num_epochs)
+testset_y_pred = model_predict(model, trainset_x)
 # print("testset_y_pred:\n{}".format(np.unique(testset_y_pred)))
 # print("testset_y:\np{}".format(np.unique(testset_y)))
 print(testset_y_pred.shape)
 print(testset_y.shape)
 
+n_correct_samples = np.sum(np.diag(confusion_matrix(trainset_y, testset_y_pred)))
+y_test_prob_error = 1 - (n_correct_samples/len(trainset_x))
+print("y_test_prob_error: {}".format(y_test_prob_error))
 print(confusion_matrix(trainset_y, testset_y_pred))
+
 testset_y_pred_df = pandas.DataFrame(testset_y_pred, columns=['satisfaction'])
 sns.countplot(x='satisfaction', data=testset_y_pred_df)
 plt.title("Number of samples classified as Satisfied vs Unsatisfied")
