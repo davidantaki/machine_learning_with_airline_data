@@ -1,14 +1,15 @@
+from skorch import NeuralNetClassifier
 import matplotlib.pyplot as plt  # For general plotting
 import pandas
 import numpy as np
 # import Airline_Funct as af
 from sklearn.metrics import confusion_matrix
+from sklearn.model_selection import GridSearchCV
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import seaborn as sns
 from sklearn import preprocessing
-from IPython.display import display
 
 
 class MLP(nn.Module):
@@ -17,7 +18,7 @@ class MLP(nn.Module):
     # nn.NLLLoss(), while also being more stable numerically... So don't implement from scratch
     # https://pytorch.org/docs/stable/generated/torch.nn.Module.html
 
-    def __init__(self, input_dim, hidden_dim, C):
+    def __init__(self, input_dim, C, hidden_dim=32):
         super(MLP, self).__init__()
         self.input = nn.Linear(input_dim, hidden_dim)
         self.input_activation = nn.ReLU()
@@ -40,46 +41,8 @@ class MLP(nn.Module):
         return x
 
 
-def train_model(model, data, labels, criterion, optimizer, num_epochs=25):
-
-    # Apparently good practice to set this "flag" too before training
-    # Does things like make sure Dropout layers are active, gradients are updated, etc.
-    # Probably not a big deal for our toy network, but still worth developing good practice
-    X_train = torch.FloatTensor(data).to(torch.device('cuda'))
-
-    # Optimize the neural network
-    y_train = torch.LongTensor(labels).to(torch.device('cuda'))
-
-    # For storing loss vs iteration
-    loss_vs_iteration = []
-
-    for epoch in range(num_epochs):
-        # Set grads to zero explicitly before backprop
-        optimizer.zero_grad()
-        outputs = model(X_train)
-        # Criterion computes the cross entropy loss between input and target
-        loss = criterion(outputs, y_train)
-        # Store loss vs epoch for graphing
-        loss_vs_iteration.append([epoch, loss.cpu().detach().numpy()])
-        # Backward pass to compute the gradients through the network
-        loss.backward()
-        # GD step update
-        optimizer.step()
-
-    # Plot loss vs epoch
-    loss_vs_iteration = np.array(loss_vs_iteration)
-    plt.scatter(loss_vs_iteration[:, 0], loss_vs_iteration[:, 1])
-    plt.xlabel("epoch")
-    plt.ylabel("Loss function")
-    plt.title("Value of the loss function")
-    plt.ylim((0, 1))
-    plt.show()
-
-    return model
-
-
 def model_predict(model, data):
-    # Similar idea to model.train(), set a flag to let network know your in "inference" mode
+    model.eval()
     X_test = torch.FloatTensor(data).to(torch.device('cuda'))
 
     # Evaluate nn on test data and compare to true labels
@@ -91,13 +54,61 @@ def model_predict(model, data):
     return np.argmax(predicted_labels, 1)
 
 
-cuda = torch.device('cuda')     # Default CUDA device
-print(torch.cuda.is_available())
-print(torch.version.cuda)
+def train_model(model, data, labels, criterion, optimizer, num_epochs=25):
 
-trainset_raw = pandas.read_csv('airline_satisfaction_train.csv')
-testset_raw = pandas.read_csv('airline_satisfaction_test.csv')
-trainset_raw.head()
+    # Apparently good practice to set this "flag" too before training
+    # Does things like make sure Dropout layers are active, gradients are updated, etc.
+    # Probably not a big deal for our toy network, but still worth developing good practice
+    model.train()
+    X_train = torch.FloatTensor(data).to(torch.device('cuda'))
+
+    # Optimize the neural network
+    y_train = torch.LongTensor(labels).to(torch.device('cuda'))
+
+    # For storing loss vs epoch
+    training_learning_data = []
+
+    for epoch in range(num_epochs):
+        # Set grads to zero explicitly before backprop
+        optimizer.zero_grad()
+        outputs = model(X_train)
+        # Criterion computes the cross entropy loss between input and target
+        loss = criterion(outputs, y_train)
+        # Store loss vs epoch for graphing
+        training_learning_data.append([epoch, loss.cpu().detach().numpy()])
+        # Backward pass to compute the gradients through the network
+        loss.backward()
+        # GD step update
+        optimizer.step()
+
+    # Plot loss vs epoch
+    training_learning_data = np.array(training_learning_data)
+    plt.scatter(training_learning_data[:, 0], training_learning_data[:, 1])
+    plt.xlabel("epoch")
+    plt.ylabel("Loss function")
+    plt.title("Value of the loss function")
+    plt.ylim((0, 1))
+    plt.show()
+
+    return model, training_learning_data
+
+
+def validate_model(model, test_data_x, test_data_y):
+    testset_y_pred = model_predict(model, test_data_x)
+    print(testset_y_pred.shape)
+    print(testset_y.shape)
+
+    n_correct_samples = np.sum(
+        np.diag(confusion_matrix(test_data_y, testset_y_pred)))
+    y_test_prob_error = 1 - (n_correct_samples/len(test_data_x))
+    print("y_test_prob_error: {}".format(y_test_prob_error))
+    print(confusion_matrix(test_data_y, testset_y_pred))
+
+    testset_y_pred_df = pandas.DataFrame(
+        testset_y_pred, columns=['satisfaction'])
+    sns.countplot(x='satisfaction', data=testset_y_pred_df)
+    plt.title("Number of samples classified as Satisfied vs Unsatisfied")
+    plt.show()
 
 
 def remove_null_samples(X):
@@ -119,6 +130,15 @@ def remove_null_samples(X):
     print("Total number of samples After removing null samples: {}".format(
         len(X)))
     return X
+
+
+cuda = torch.device('cuda')     # Default CUDA device
+print(torch.cuda.is_available())
+print(torch.version.cuda)
+
+trainset_raw = pandas.read_csv('airline_satisfaction_train.csv')
+testset_raw = pandas.read_csv('airline_satisfaction_test.csv')
+trainset_raw.head()
 
 
 classes_str = ["neutral or dissatisfied", "satisfied"]
@@ -213,6 +233,8 @@ scaler = preprocessing.StandardScaler().fit(trainset_x)
 trainset_x = scaler.transform(trainset_x)
 scaler = preprocessing.StandardScaler().fit(testset_x)
 testset_x = scaler.transform(testset_x)
+print([np.dtype(testset_x[0, i]) for i in range(0, 18)])
+print([np.dtype(trainset_x[0, i]) for i in range(0, 18)])
 # plt.scatter(np.arange(0, len(trainset_x)), trainset_x[:, 0])
 # plt.show()
 # trainset_x_df = pandas.DataFrame(trainset_x, columns=features[0:18])
@@ -223,6 +245,8 @@ testset_x = scaler.transform(testset_x)
 # plt.xlabel('Delay (min)')
 # plt.ylabel('Flights')
 # plt.show()
+
+
 
 # Params
 input_dim = trainset_x.shape[1]
@@ -243,26 +267,36 @@ optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
 criterion = nn.CrossEntropyLoss()
 num_epochs = 1000
 
-# trainset_x_df = pandas.DataFrame(normalized_data.detach().numpy(), columns=features[0:18])
-# sns.pairplot(data=trainset_x_df)
-# plt.scatter(trainset_x[:,0], np.arange(0, len(trainset_x)))
-# plt.show()
+# Train Model
+# model, training_learning_data = train_model(model, trainset_x, trainset_y, criterion,
+#                                            optimizer, num_epochs=num_epochs)
+# Validate Model
 
-# Trained model
-model = train_model(model, trainset_x, trainset_y, criterion,
-                    optimizer, num_epochs=num_epochs)
-testset_y_pred = model_predict(model, trainset_x)
-# print("testset_y_pred:\n{}".format(np.unique(testset_y_pred)))
-# print("testset_y:\np{}".format(np.unique(testset_y)))
-print(testset_y_pred.shape)
-print(testset_y.shape)
 
-n_correct_samples = np.sum(np.diag(confusion_matrix(trainset_y, testset_y_pred)))
-y_test_prob_error = 1 - (n_correct_samples/len(trainset_x))
-print("y_test_prob_error: {}".format(y_test_prob_error))
-print(confusion_matrix(trainset_y, testset_y_pred))
+net = NeuralNetClassifier(
+    MLP,
+    criterion=torch.nn.NLLLoss,
+    optimizer=torch.optim.SGD,
+    max_epochs=10,
+    lr=0.1,
+    optimizer__momentum=0.95,
+    # Shuffle training data on each epoch
+    iterator_train__shuffle=True,
+)
 
-testset_y_pred_df = pandas.DataFrame(testset_y_pred, columns=['satisfaction'])
-sns.countplot(x='satisfaction', data=testset_y_pred_df)
-plt.title("Number of samples classified as Satisfied vs Unsatisfied")
-plt.show()
+# deactivate skorch-internal train-valid split and verbose logging
+net.set_params(train_split=False, verbose=0)
+params = {
+    'lr': [0.01, 0.02],
+    'max_epochs': [10, 20],
+    'optimizer__momentum': [0.8, 0.9],
+    'module__hidden_dim': [32, 64],
+    'module__input_dim': [input_dim],
+    'module__C': [output_dim]
+}
+gs = GridSearchCV(net, params, refit=False, cv=3,
+                  scoring='accuracy', verbose=2)
+
+gs.fit(testset_x, testset_y)
+print("best score: {:.3f}, best params: {}".format(
+    gs.best_score_, gs.best_params_))
