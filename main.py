@@ -1,10 +1,11 @@
+from random import shuffle
 from skorch import NeuralNetClassifier
 import matplotlib.pyplot as plt  # For general plotting
 import pandas
 import numpy as np
 # import Airline_Funct as af
-from sklearn.metrics import confusion_matrix
-from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.model_selection import GridSearchCV, KFold
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -54,7 +55,7 @@ def model_predict(model, data):
     return np.argmax(predicted_labels, 1)
 
 
-def train_model(model, data, labels, criterion, optimizer, num_epochs=25):
+def train_model(model, data, labels, criterion, optimizer, num_epochs=25, plot=False):
 
     # Apparently good practice to set this "flag" too before training
     # Does things like make sure Dropout layers are active, gradients are updated, etc.
@@ -72,7 +73,6 @@ def train_model(model, data, labels, criterion, optimizer, num_epochs=25):
         # Set grads to zero explicitly before backprop
         optimizer.zero_grad()
         outputs = model(X_train)
-        # Criterion computes the cross entropy loss between input and target
         loss = criterion(outputs, y_train)
         # Store loss vs epoch for graphing
         training_learning_data.append([epoch, loss.cpu().detach().numpy()])
@@ -83,32 +83,33 @@ def train_model(model, data, labels, criterion, optimizer, num_epochs=25):
 
     # Plot loss vs epoch
     training_learning_data = np.array(training_learning_data)
-    plt.scatter(training_learning_data[:, 0], training_learning_data[:, 1])
-    plt.xlabel("epoch")
-    plt.ylabel("Loss function")
-    plt.title("Value of the loss function")
-    plt.ylim((0, 1))
-    plt.show()
+    if plot:
+        plt.scatter(training_learning_data[:, 0], training_learning_data[:, 1])
+        plt.xlabel("epoch")
+        plt.ylabel("Loss function")
+        plt.title("Value of the loss function")
+        plt.ylim((0, 1))
+        plt.show()
 
     return model, training_learning_data
 
 
-def validate_model(model, test_data_x, test_data_y):
+def validate_model(model, test_data_x, test_data_y, plot=False):
     testset_y_pred = model_predict(model, test_data_x)
-    print(testset_y_pred.shape)
-    print(testset_y.shape)
-
-    n_correct_samples = np.sum(
-        np.diag(confusion_matrix(test_data_y, testset_y_pred)))
-    y_test_prob_error = 1 - (n_correct_samples/len(test_data_x))
-    print("y_test_prob_error: {}".format(y_test_prob_error))
+    # print(testset_y_pred.shape)
+    # print(testset_y.shape)
+    accuracy = accuracy_score(test_data_y, testset_y_pred)
+    print("accuracy: {}".format(accuracy))
     print(confusion_matrix(test_data_y, testset_y_pred))
 
-    testset_y_pred_df = pandas.DataFrame(
-        testset_y_pred, columns=['satisfaction'])
-    sns.countplot(x='satisfaction', data=testset_y_pred_df)
-    plt.title("Number of samples classified as Satisfied vs Unsatisfied")
-    plt.show()
+    if plot:
+        testset_y_pred_df = pandas.DataFrame(
+            testset_y_pred, columns=['satisfaction'])
+        sns.countplot(x='satisfaction', data=testset_y_pred_df)
+        plt.title("Number of samples classified as Satisfied vs Unsatisfied")
+        plt.show()
+
+    return accuracy
 
 
 def remove_null_samples(X):
@@ -247,13 +248,85 @@ print([np.dtype(trainset_x[0, i]) for i in range(0, 18)])
 # plt.show()
 
 
+def cross_validate(train_x, train_y, folds, input_dim, hidden_dim, output_dim, lr, momentum, n_epochs):
+    '''
+    Runs cross validation for a SINGLE set of hyperparmeters.
+    Returns the accuracy score for the given set of hyperparameters.
+    '''
+    # Partition data
+    kf = KFold(n_splits=folds, shuffle=True)
+    # CROSS VALIDATION
+    k = 0
+    k_scores = []
+    # NOTE that these subsets are of the TRAINING dataset
+    for train_indices, valid_indices in kf.split(train_x):
+        # Extract the training and validation sets from the K-fold split
+        X_train_k = train_x[train_indices]
+        X_valid_k = train_x[valid_indices]
+        y_train_k = train_y[train_indices]
+        y_valid_k = train_y[valid_indices]
+
+        model = MLP(input_dim, hidden_dim,
+                    output_dim).to(torch.device('cuda'))
+        print(model)
+
+        # Stochastic GD with learning rate and momentum hyperparameters
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
+
+        # The nn.CrossEntropyLoss() loss function automatically performs a log_softmax() to
+        # the output when validating, on top of calculating the negative log-likelihood using
+        # nn.NLLLoss(), while also being more stable numerically...
+        criterion = nn.NLLLoss()
+        num_epochs = n_epochs
+
+        # Train Model
+        model, training_learning_data = train_model(model, X_train_k, y_train_k, criterion,
+                                                                              optimizer, num_epochs=num_epochs)
+        # Validate model and get accuracy score
+        # Get log-likelihood on the validation set
+        accuracy = validate_model(model, X_valid_k, y_valid_k)
+        k_scores.append(accuracy)
+        k += 1
+        print(
+            "k-fold: {}\taccuracy: {}".format(k, accuracy))
+
+    k_scores = np.array(k_scores)
+    print(k_scores)
+    # Compute Average of scores
+    k_scores = np.mean(k_scores, axis=0)
+    print(k_scores)
+    return k_scores
+
+    # # Plot Cross Validation results
+    # fig4, ax4 = plt.subplots(1, 1, figsize=(10, 10))
+    # ax4.set_ylabel("Log Likelihood")
+    # ax4.set_xlabel("# Components")
+    # ax4.set_title("Cross Validation Resutls: Log Likelihood vs # Components")
+    # ax4.plot(n_components_list, scores, marker='.')
+    # ax4.plot(n_components_list[opt_s_i], scores[opt_s_i],
+    #          marker='x', c='r', label="Optimal # Components")
+    # ax4.legend()
+    # plt.show()
+
+    # opt_n_component = n_components_list[opt_s_i]
+    # print("Optimal Num Components: {}".format(opt_n_component))
+    # return opt_n_component
+
 
 # Params
 input_dim = trainset_x.shape[1]
 # TODO: Cross validation to select hidden neurons
 n_hidden_neurons = 64
 output_dim = num_classes
+lr = 0.01
+num_epochs = 1000
+momentum = 0.9
 
+
+cross_validate(trainset_x, trainset_y, 2, input_dim,
+               64, output_dim, lr, momentum, num_epochs)
+
+'''
 model = MLP(input_dim, n_hidden_neurons,
             output_dim).to(torch.device('cuda'))
 print(model)
@@ -265,38 +338,9 @@ optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
 # the output when validating, on top of calculating the negative log-likelihood using
 # nn.NLLLoss(), while also being more stable numerically...
 criterion = nn.CrossEntropyLoss()
-num_epochs = 1000
+
 
 # Train Model
-# model, training_learning_data = train_model(model, trainset_x, trainset_y, criterion,
-#                                            optimizer, num_epochs=num_epochs)
-# Validate Model
-
-
-net = NeuralNetClassifier(
-    MLP,
-    criterion=torch.nn.NLLLoss,
-    optimizer=torch.optim.SGD,
-    max_epochs=10,
-    lr=0.1,
-    optimizer__momentum=0.95,
-    # Shuffle training data on each epoch
-    iterator_train__shuffle=True,
-)
-
-# deactivate skorch-internal train-valid split and verbose logging
-net.set_params(train_split=False, verbose=0)
-params = {
-    'lr': [0.01, 0.02],
-    'max_epochs': [10, 20],
-    'optimizer__momentum': [0.8, 0.9],
-    'module__hidden_dim': [32, 64],
-    'module__input_dim': [input_dim],
-    'module__C': [output_dim]
-}
-gs = GridSearchCV(net, params, refit=False, cv=3,
-                  scoring='accuracy', verbose=2)
-
-gs.fit(testset_x, testset_y)
-print("best score: {:.3f}, best params: {}".format(
-    gs.best_score_, gs.best_params_))
+model, training_learning_data = train_model(
+    model, trainset_x, trainset_y, criterion, optimizer, num_epochs=num_epochs)
+'''
