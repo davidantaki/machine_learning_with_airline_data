@@ -338,7 +338,7 @@ def grid_search_cv():
     n_hidden_neurons = [2, 64]
     lr = [.01]
     momentum = [0.9]
-    num_epochs = [100]
+    num_epochs = [1000]
 
 
     params_grid = generate_hyper_params_grid(
@@ -346,17 +346,21 @@ def grid_search_cv():
     grid_search_scores = []
     param_counter = 1
     for param in params_grid:
-        cv_score = cross_validate(_train_x=trainset_x, _train_y=trainset_y, _folds=k_folds, _input_dim=input_dim, _hidden_dim=int(param[0]),
-                                _output_dim=output_dim, _lr=int(param[1]), _momentum=param[2], _n_epochs=int(param[3]))
+        neurons = int(param[0])
+        lr = param[1]
+        momentum = param[2]
+        epochs = int(param[3])
+        cv_score = cross_validate(_train_x=trainset_x, _train_y=trainset_y, _folds=k_folds, _input_dim=input_dim, _hidden_dim=neurons,
+                                _output_dim=output_dim, _lr=lr, _momentum=momentum, _n_epochs=epochs)
         grid_search_scores.append(cv_score)
         percent_done = (param_counter/len(params_grid))*100
         print(
-            f"GridSearch:\thidden_neurons: {param[0]}\tlr: {param[1]}\tmomentum: {param[2]}\tepochs: {param[3]}\tpercent_done: {percent_done}%")
+            f"GridSearch:\thidden_neurons: {neurons}\tlr: {lr}\tmomentum: {momentum}\tepochs: {epochs}\tpercent_done: {percent_done}%")
         param_counter = param_counter + 1
 
     grid_search_scores = np.array(grid_search_scores)
     print(f"grid_search_scores:\n {grid_search_scores}")
-    optimal_params = np.argmax(grid_search_scores)
+    optimal_params = params_grid[np.argmax(grid_search_scores)]
     print(optimal_params)
 
 
