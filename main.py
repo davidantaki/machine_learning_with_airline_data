@@ -56,43 +56,57 @@ def model_predict(model, data):
     return np.argmax(predicted_labels, 1)
 
 
-def train_model(model, data, labels, criterion, optimizer, num_epochs=25, plot=False):
+def train_model(model, X_train, y_train, X_valid, y_valid, criterion, optimizer, num_epochs=25, plot=False):
 
     # Apparently good practice to set this "flag" too before training
     # Does things like make sure Dropout layers are active, gradients are updated, etc.
     # Probably not a big deal for our toy network, but still worth developing good practice
     model.train()
-    X_train = torch.FloatTensor(data).to(torch.device('cuda'))
 
-    # Optimize the neural network
-    y_train = torch.LongTensor(labels).to(torch.device('cuda'))
+    # Convert to tensors
+    X_train = torch.FloatTensor(X_train).to(torch.device('cuda'))
+    y_train = torch.LongTensor(y_train).to(torch.device('cuda'))
+    X_valid = torch.FloatTensor(X_valid).to(torch.device('cuda'))
+    y_valid = torch.LongTensor(y_valid).to(torch.device('cuda'))
 
     # For storing loss vs epoch
-    training_learning_data = []
+    training_loss_vs_epoch = []
+    validation_loss_vs_epoch = []
 
     for epoch in range(num_epochs):
+        # TRAIN STEP
+        model.train()
         # Set grads to zero explicitly before backprop
         optimizer.zero_grad()
         outputs = model(X_train)
-        loss = criterion(outputs, y_train)
-        # Store loss vs epoch for graphing
-        training_learning_data.append([epoch, loss.cpu().detach().numpy()])
+        train_loss = criterion(outputs, y_train)
+        # Store training loss vs epoch for graphing
+        training_loss_vs_epoch.append(
+            [epoch, train_loss.cpu().detach().numpy()])
         # Backward pass to compute the gradients through the network
-        loss.backward()
+        train_loss.backward()
         # GD step update
         optimizer.step()
 
+        # GET VALIDATION LOSS (EVAL)
+        model.eval()
+        y_valid_pred = model(X_valid)
+        valid_loss = criterion(y_valid_pred, y_valid)
+        validation_loss_vs_epoch.append(
+            [epoch, valid_loss.cpu().detach().numpy()])
+
     # Plot loss vs epoch
-    training_learning_data = np.array(training_learning_data)
+    training_loss_vs_epoch = np.array(training_loss_vs_epoch)
+    validation_loss_vs_epoch = np.array(validation_loss_vs_epoch)
     if plot:
-        plt.scatter(training_learning_data[:, 0], training_learning_data[:, 1])
+        plt.scatter(training_loss_vs_epoch[:, 0], training_loss_vs_epoch[:, 1])
         plt.xlabel("epoch")
         plt.ylabel("Loss function")
         plt.title("Value of the loss function")
         # plt.ylim((0, 1))
         plt.show()
 
-    return model, training_learning_data
+    return model, training_loss_vs_epoch, validation_loss_vs_epoch
 
 
 def validate_model(model, test_data_x, test_data_y, plot=False):
@@ -135,8 +149,8 @@ def remove_null_samples(X):
 
 
 cuda = torch.device('cuda')     # Default CUDA device
-print(torch.cuda.is_available())
-print(torch.version.cuda)
+print(f"Is CUDA acceleration supported: {torch.cuda.is_available()}")
+print(f"CUDA version: {torch.version.cuda}")
 
 trainset_raw = pandas.read_csv('airline_satisfaction_train.csv')
 testset_raw = pandas.read_csv('airline_satisfaction_test.csv')
@@ -261,6 +275,9 @@ def cross_validate(_train_x, _train_y, _folds: int, _input_dim: int, _hidden_dim
     # CROSS VALIDATION
     k = 0
     k_scores = []
+    # This is for storing the learning curve for the learning progress of the cross validation (NOT for generatlization error)
+    training_loss_vs_epoch_k_list = []
+    validation_loss_vs_epoch_k_list = []
     # NOTE that these subsets are of the TRAINING dataset
     for train_indices, valid_indices in kf.split(_train_x):
         # Extract the training and validation sets from the K-fold split
@@ -284,22 +301,31 @@ def cross_validate(_train_x, _train_y, _folds: int, _input_dim: int, _hidden_dim
         num_epochs = _n_epochs
 
         # Train Model
-        model, training_learning_data = train_model(model, X_train_k, y_train_k, criterion,
-                                                    optimizer, num_epochs=num_epochs, plot=False)
-        # Validate model and get accuracy score
-        # Get log-likelihood on the validation set
+        model, training_loss_vs_epoch_k, validation_loss_vs_epoch_k = train_model(model, X_train_k, y_train_k, X_valid_k, y_valid_k, criterion,
+                                                                                  optimizer, num_epochs=num_epochs, plot=False)
+        training_loss_vs_epoch_k_list.append(training_loss_vs_epoch_k)
+        validation_loss_vs_epoch_k_list.append(validation_loss_vs_epoch_k)
+        # Get accuracy score on validation set
         accuracy = validate_model(model, X_valid_k, y_valid_k)
         k_scores.append(accuracy)
         k += 1
         print(
             "k-fold: {}\taccuracy: {}".format(k, accuracy))
 
+    # Average losses over all k-folds for training loss and validation loss
+    training_loss_vs_epoch_k_list = np.array(training_loss_vs_epoch_k_list)
+    training_loss_vs_epoch_k_list = np.mean(
+        training_loss_vs_epoch_k_list, axis=0)
+    validation_loss_vs_epoch_k_list = np.array(validation_loss_vs_epoch_k_list)
+    validation_loss_vs_epoch_k_list = np.mean(
+        validation_loss_vs_epoch_k_list, axis=0)
+
     k_scores = np.array(k_scores)
     print(k_scores)
     # Compute Average of scores
     k_score = np.mean(k_scores, axis=0)
     print(k_score)
-    return k_score
+    return k_score, training_loss_vs_epoch_k_list, validation_loss_vs_epoch_k_list
 
     # # Plot Cross Validation results
     # fig4, ax4 = plt.subplots(1, 1, figsize=(10, 10))
@@ -324,6 +350,7 @@ def generate_hyper_params_grid(params):
     print(f"param_grid.shape: {params_grid.shape}")
     return params_grid.tolist()
 
+
 def grid_search_cv():
     # Permanent Hyperparams
     input_dim = trainset_x.shape[1]
@@ -335,11 +362,10 @@ def grid_search_cv():
     # momentum = [0.1, 0.5, 0.9, 0.99]
     # num_epochs = [10, 100, 1000]
 
-    n_hidden_neurons = [2, 64]
+    n_hidden_neurons = [2]
     lr = [.01]
     momentum = [0.9]
     num_epochs = [1000]
-
 
     params_grid = generate_hyper_params_grid(
         [n_hidden_neurons, lr, momentum, num_epochs])
@@ -350,39 +376,31 @@ def grid_search_cv():
         lr = param[1]
         momentum = param[2]
         epochs = int(param[3])
-        cv_score = cross_validate(_train_x=trainset_x, _train_y=trainset_y, _folds=k_folds, _input_dim=input_dim, _hidden_dim=neurons,
-                                _output_dim=output_dim, _lr=lr, _momentum=momentum, _n_epochs=epochs)
+        cv_score, training_loss_vs_epoch_k_list, validation_loss_vs_epoch_k_list = cross_validate(_train_x=trainset_x, _train_y=trainset_y, _folds=k_folds, _input_dim=input_dim, _hidden_dim=neurons,
+                                                                                                  _output_dim=output_dim, _lr=lr, _momentum=momentum, _n_epochs=epochs)
         grid_search_scores.append(cv_score)
         percent_done = (param_counter/len(params_grid))*100
         print(
             f"GridSearch:\thidden_neurons: {neurons}\tlr: {lr}\tmomentum: {momentum}\tepochs: {epochs}\tpercent_done: {percent_done}%")
         param_counter = param_counter + 1
 
+        # Plot training and validation loss vs epoch
+        plt.scatter(
+            training_loss_vs_epoch_k_list[:, 0], training_loss_vs_epoch_k_list[:, 1], label="Training loss")
+        plt.scatter(
+            validation_loss_vs_epoch_k_list[:, 0], validation_loss_vs_epoch_k_list[:, 1], label="Validation loss")
+        plt.legend()
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss function")
+        plt.title(
+            f"Cross Validation Training Loss vs. Validation Loss\nParams:\nhidden_neurons: {neurons} lr: {lr} momentum: {momentum} epochs: {epochs}")
+        plt.ylim((0, 1))
+        plt.show()
+
     grid_search_scores = np.array(grid_search_scores)
     print(f"grid_search_scores:\n {grid_search_scores}")
     optimal_params = params_grid[np.argmax(grid_search_scores)]
     print(optimal_params)
-
-
-
-'''
-model = MLP(input_dim, n_hidden_neurons,
-            output_dim).to(torch.device('cuda'))
-print(model)
-
-# Stochastic GD with learning rate and momentum hyperparameters
-optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
-
-# The nn.CrossEntropyLoss() loss function automatically performs a log_softmax() to
-# the output when validating, on top of calculating the negative log-likelihood using
-# nn.NLLLoss(), while also being more stable numerically...
-criterion = nn.CrossEntropyLoss()
-
-
-# Train Model
-model, training_learning_data = train_model(
-    model, trainset_x, trainset_y, criterion, optimizer, num_epochs=num_epochs)
-'''
 
 grid_search_cv()
 
