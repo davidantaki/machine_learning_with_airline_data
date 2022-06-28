@@ -1,10 +1,11 @@
+import itertools
 from random import shuffle
 from skorch import NeuralNetClassifier
 import matplotlib.pyplot as plt  # For general plotting
 import pandas
 import numpy as np
 # import Airline_Funct as af
-from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.model_selection import GridSearchCV, KFold
 import torch
 import torch.nn as nn
@@ -28,7 +29,7 @@ class MLP(nn.Module):
         self.linear2 = nn.Linear(hidden_dim, hidden_dim)
         self.activation2 = nn.ReLU()
         self.output_fc = nn.Linear(hidden_dim, C)
-        self.output_activation = nn.LogSoftmax(dim=1)
+        # self.output_activation = nn.LogSoftmax(dim=1)
 
     def forward(self, x):
         x = self.input(x)
@@ -38,7 +39,7 @@ class MLP(nn.Module):
         x = self.linear2(x)
         x = F.relu(x)
         x = self.output_fc(x)
-        x = self.output_activation(x)
+        # x = self.output_activation(x)
         return x
 
 
@@ -48,7 +49,7 @@ def model_predict(model, data):
 
     # Evaluate nn on test data and compare to true labels
     predicted_labels = model(X_test)
-    print("predicated_labels:\n {}".format(predicted_labels))
+    # print("predicted_labels:\n {}".format(predicted_labels))
     # Back to numpy
     predicted_labels = predicted_labels.cpu().detach().numpy()
 
@@ -88,7 +89,7 @@ def train_model(model, data, labels, criterion, optimizer, num_epochs=25, plot=F
         plt.xlabel("epoch")
         plt.ylabel("Loss function")
         plt.title("Value of the loss function")
-        plt.ylim((0, 1))
+        # plt.ylim((0, 1))
         plt.show()
 
     return model, training_learning_data
@@ -148,6 +149,8 @@ num_classes = len(classes_str)
 
 # Load training set
 trainset = trainset_raw
+# # Shuffle entire training set.
+# trainset = trainset.sample(frac=1)
 # print("trainset:\n{}".format(trainset))
 # Get rid of useless columns
 del trainset["Unnamed: 0"]
@@ -234,8 +237,8 @@ scaler = preprocessing.StandardScaler().fit(trainset_x)
 trainset_x = scaler.transform(trainset_x)
 scaler = preprocessing.StandardScaler().fit(testset_x)
 testset_x = scaler.transform(testset_x)
-print([np.dtype(testset_x[0, i]) for i in range(0, 18)])
-print([np.dtype(trainset_x[0, i]) for i in range(0, 18)])
+# print([np.dtype(testset_x[0, i]) for i in range(0, 18)])
+# print([np.dtype(trainset_x[0, i]) for i in range(0, 18)])
 # plt.scatter(np.arange(0, len(trainset_x)), trainset_x[:, 0])
 # plt.show()
 # trainset_x_df = pandas.DataFrame(trainset_x, columns=features[0:18])
@@ -248,40 +251,41 @@ print([np.dtype(trainset_x[0, i]) for i in range(0, 18)])
 # plt.show()
 
 
-def cross_validate(train_x, train_y, folds, input_dim, hidden_dim, output_dim, lr, momentum, n_epochs):
+def cross_validate(_train_x, _train_y, _folds: int, _input_dim: int, _hidden_dim: int, _output_dim: int, _lr, _momentum, _n_epochs: int):
     '''
     Runs cross validation for a SINGLE set of hyperparmeters.
     Returns the accuracy score for the given set of hyperparameters.
     '''
     # Partition data
-    kf = KFold(n_splits=folds, shuffle=True)
+    kf = KFold(n_splits=_folds, shuffle=True)
     # CROSS VALIDATION
     k = 0
     k_scores = []
     # NOTE that these subsets are of the TRAINING dataset
-    for train_indices, valid_indices in kf.split(train_x):
+    for train_indices, valid_indices in kf.split(_train_x):
         # Extract the training and validation sets from the K-fold split
-        X_train_k = train_x[train_indices]
-        X_valid_k = train_x[valid_indices]
-        y_train_k = train_y[train_indices]
-        y_valid_k = train_y[valid_indices]
+        X_train_k = _train_x[train_indices]
+        X_valid_k = _train_x[valid_indices]
+        y_train_k = _train_y[train_indices]
+        y_valid_k = _train_y[valid_indices]
 
-        model = MLP(input_dim, hidden_dim,
-                    output_dim).to(torch.device('cuda'))
-        print(model)
+        model = MLP(_input_dim, _output_dim, _hidden_dim).to(
+            torch.device('cuda'))
+        # print(model)
 
         # Stochastic GD with learning rate and momentum hyperparameters
-        optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
+        optimizer = torch.optim.SGD(
+            model.parameters(), lr=_lr, momentum=_momentum)
 
         # The nn.CrossEntropyLoss() loss function automatically performs a log_softmax() to
         # the output when validating, on top of calculating the negative log-likelihood using
         # nn.NLLLoss(), while also being more stable numerically...
-        criterion = nn.NLLLoss()
-        num_epochs = n_epochs
+        criterion = nn.CrossEntropyLoss()
+        num_epochs = _n_epochs
 
         # Train Model
         model, training_learning_data = train_model(model, X_train_k, y_train_k, criterion,
-                                                                              optimizer, num_epochs=num_epochs)
+                                                    optimizer, num_epochs=num_epochs, plot=False)
         # Validate model and get accuracy score
         # Get log-likelihood on the validation set
         accuracy = validate_model(model, X_valid_k, y_valid_k)
@@ -293,9 +297,9 @@ def cross_validate(train_x, train_y, folds, input_dim, hidden_dim, output_dim, l
     k_scores = np.array(k_scores)
     print(k_scores)
     # Compute Average of scores
-    k_scores = np.mean(k_scores, axis=0)
-    print(k_scores)
-    return k_scores
+    k_score = np.mean(k_scores, axis=0)
+    print(k_score)
+    return k_score
 
     # # Plot Cross Validation results
     # fig4, ax4 = plt.subplots(1, 1, figsize=(10, 10))
@@ -313,18 +317,49 @@ def cross_validate(train_x, train_y, folds, input_dim, hidden_dim, output_dim, l
     # return opt_n_component
 
 
-# Params
-input_dim = trainset_x.shape[1]
-# TODO: Cross validation to select hidden neurons
-n_hidden_neurons = 64
-output_dim = num_classes
-lr = 0.01
-num_epochs = 1000
-momentum = 0.9
+def generate_hyper_params_grid(params):
+    params_grid = list(itertools.product(*params))
+    params_grid = np.array(params_grid)
+    # print(params_grid)
+    print(f"param_grid.shape: {params_grid.shape}")
+    return params_grid.tolist()
+
+def grid_search_cv():
+    # Permanent Hyperparams
+    input_dim = trainset_x.shape[1]
+    output_dim = num_classes
+    k_folds = 10
+    # Params to try for Cross validation
+    # n_hidden_neurons = [2, 4, 8, 16, 32, 64, 128]
+    # lr = [.1, .01, 10e-3, 10e-4, 10e-5]
+    # momentum = [0.1, 0.5, 0.9, 0.99]
+    # num_epochs = [10, 100, 1000]
+
+    n_hidden_neurons = [2, 64]
+    lr = [.01]
+    momentum = [0.9]
+    num_epochs = [100]
 
 
-cross_validate(trainset_x, trainset_y, 2, input_dim,
-               64, output_dim, lr, momentum, num_epochs)
+    params_grid = generate_hyper_params_grid(
+        [n_hidden_neurons, lr, momentum, num_epochs])
+    grid_search_scores = []
+    param_counter = 1
+    for param in params_grid:
+        cv_score = cross_validate(_train_x=trainset_x, _train_y=trainset_y, _folds=k_folds, _input_dim=input_dim, _hidden_dim=int(param[0]),
+                                _output_dim=output_dim, _lr=int(param[1]), _momentum=param[2], _n_epochs=int(param[3]))
+        grid_search_scores.append(cv_score)
+        percent_done = (param_counter/len(params_grid))*100
+        print(
+            f"GridSearch:\thidden_neurons: {param[0]}\tlr: {param[1]}\tmomentum: {param[2]}\tepochs: {param[3]}\tpercent_done: {percent_done}%")
+        param_counter = param_counter + 1
+
+    grid_search_scores = np.array(grid_search_scores)
+    print(f"grid_search_scores:\n {grid_search_scores}")
+    optimal_params = np.argmax(grid_search_scores)
+    print(optimal_params)
+
+
 
 '''
 model = MLP(input_dim, n_hidden_neurons,
@@ -344,3 +379,15 @@ criterion = nn.CrossEntropyLoss()
 model, training_learning_data = train_model(
     model, trainset_x, trainset_y, criterion, optimizer, num_epochs=num_epochs)
 '''
+
+grid_search_cv()
+
+# Train final model
+# Cross Validation selected params:
+input_dim = trainset_x.shape[1]
+n_hidden_neurons = 64
+output_dim = num_classes
+lr = 0.01
+num_epochs = 1000
+momentum = 0.9
+# classification_report()
