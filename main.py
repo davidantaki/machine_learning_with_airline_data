@@ -298,11 +298,10 @@ def cross_validate(_train_x, _train_y, _folds: int, _input_dim: int, _hidden_dim
         # the output when validating, on top of calculating the negative log-likelihood using
         # nn.NLLLoss(), while also being more stable numerically...
         criterion = nn.CrossEntropyLoss()
-        num_epochs = _n_epochs
 
         # Train Model
         model, training_loss_vs_epoch_k, validation_loss_vs_epoch_k = train_model(model, X_train_k, y_train_k, X_valid_k, y_valid_k, criterion,
-                                                                                  optimizer, num_epochs=num_epochs, plot=False)
+                                                                                  optimizer, num_epochs=_n_epochs, plot=False)
         training_loss_vs_epoch_k_list.append(training_loss_vs_epoch_k)
         validation_loss_vs_epoch_k_list.append(validation_loss_vs_epoch_k)
         # Get accuracy score on validation set
@@ -376,7 +375,7 @@ def grid_search_cv():
         lr = param[1]
         momentum = param[2]
         epochs = int(param[3])
-        cv_score, training_loss_vs_epoch_k_list, validation_loss_vs_epoch_k_list = cross_validate(_train_x=trainset_x, _train_y=trainset_y, _folds=k_folds, _input_dim=input_dim, _hidden_dim=neurons,
+        cv_score, training_loss_vs_epoch_k, validation_loss_vs_epoch_k = cross_validate(_train_x=trainset_x, _train_y=trainset_y, _folds=k_folds, _input_dim=input_dim, _hidden_dim=neurons,
                                                                                                   _output_dim=output_dim, _lr=lr, _momentum=momentum, _n_epochs=epochs)
         grid_search_scores.append(cv_score)
         percent_done = (param_counter/len(params_grid))*100
@@ -384,11 +383,12 @@ def grid_search_cv():
             f"GridSearch:\thidden_neurons: {neurons}\tlr: {lr}\tmomentum: {momentum}\tepochs: {epochs}\tpercent_done: {percent_done}%")
         param_counter = param_counter + 1
 
-        # Plot training and validation loss vs epoch
+        # Plot training and validation loss vs epoch (using the training loss from CV averaged over k-folds and the validation loss from CV averaged over k-folds)
+        # This is an indicator of how well the CV is learning. (NOT for generalizability as we are not using an unseen dataset here)
         plt.scatter(
-            training_loss_vs_epoch_k_list[:, 0], training_loss_vs_epoch_k_list[:, 1], label="Training loss")
+            training_loss_vs_epoch_k[:, 0], training_loss_vs_epoch_k[:, 1], label="Training loss")
         plt.scatter(
-            validation_loss_vs_epoch_k_list[:, 0], validation_loss_vs_epoch_k_list[:, 1], label="Validation loss")
+            validation_loss_vs_epoch_k[:, 0], validation_loss_vs_epoch_k[:, 1], label="Validation loss")
         plt.legend()
         plt.xlabel("Epoch")
         plt.ylabel("Loss function")
@@ -397,10 +397,32 @@ def grid_search_cv():
         plt.ylim((0, 1))
         plt.show()
 
+        # Plot training and test loss vs epoch (using the full training and test datasets)
+        # This is an indicator of the generalizability of the model.
+        model = MLP(input_dim, output_dim, neurons).to(
+        torch.device('cuda'))
+        optimizer = torch.optim.SGD(
+            model.parameters(), lr=lr, momentum=momentum)
+        criterion = nn.CrossEntropyLoss()
+        model, training_loss_vs_epoch_k, validation_loss_vs_epoch_k = train_model(model, trainset_x, trainset_y, testset_x, testset_y, criterion,
+                                                                                  optimizer, num_epochs=epochs, plot=False)
+        plt.scatter(
+            training_loss_vs_epoch_k[:, 0], training_loss_vs_epoch_k[:, 1], label="Training loss")
+        plt.scatter(
+            validation_loss_vs_epoch_k[:, 0], validation_loss_vs_epoch_k[:, 1], label="Test loss")
+        plt.legend()
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss function")
+        plt.title(
+            f"Training Loss vs. Test Loss\nTrained on Full Trainset, Tested on full Testset\nParams:\nhidden_neurons: {neurons} lr: {lr} momentum: {momentum} epochs: {epochs}")
+        plt.ylim((0, 1))
+        plt.show()
+
     grid_search_scores = np.array(grid_search_scores)
     print(f"grid_search_scores:\n {grid_search_scores}")
     optimal_params = params_grid[np.argmax(grid_search_scores)]
     print(optimal_params)
+
 
 grid_search_cv()
 
@@ -412,4 +434,4 @@ output_dim = num_classes
 lr = 0.01
 num_epochs = 1000
 momentum = 0.9
-# classification_report()
+classification_report()
