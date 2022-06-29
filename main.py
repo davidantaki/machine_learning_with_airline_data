@@ -63,7 +63,7 @@ def train_model(model, X_train, y_train, X_valid, y_valid, criterion, optimizer,
     # Early stopping Params
     last_loss = 100
     patience = 4
-    threshold = 0.01
+    threshold = 0.05
     trigger_times = 0
     min_epochs = 25
 
@@ -496,7 +496,7 @@ def demonstrate_underfitting_overfitting():
         model.parameters(), lr=lr, momentum=momentum, )
     criterion = nn.CrossEntropyLoss()
     model, training_loss_vs_epoch_k, validation_loss_vs_epoch_k = train_model(model, trainset_x, trainset_y, testset_x, testset_y, criterion,
-                                                                              optimizer, num_epochs=epochs, plot=False)
+                                                                              optimizer, num_epochs=epochs, plot=False, early_stopping=True)
     # TODOL: Graph below with range of neurons
     # Then try overfitting and adding weight decay to see if it reduces overfitting
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
