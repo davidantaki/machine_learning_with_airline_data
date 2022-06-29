@@ -63,13 +63,13 @@ percent = (trainset.isnull().sum()/trainset.isnull().count()).sort_values(ascend
 missing = pd.concat([total, percent], axis=1, keys=['Total', 'Percent'])
 missing.head()
 
-# Inputing missing value with mean
+# Replacing empty values with means
 trainset['Arrival_Delay_in_Minutes'] = trainset['Arrival_Delay_in_Minutes'].fillna(trainset['Arrival_Delay_in_Minutes'].mean())
 testset['Arrival_Delay_in_Minutes'] = testset['Arrival_Delay_in_Minutes'].fillna(testset['Arrival_Delay_in_Minutes'].mean())
 
 trainset.select_dtypes(include=['object']).columns
 
-# Replace NaN with mode for categorical variables
+# Replace NaN with mode for features
 
 trainset['Gender'] = trainset['Gender'].fillna(trainset['Gender'].mode()[0])
 testset['Gender'] = testset['Gender'].fillna(testset['Gender'].mode()[0])
@@ -154,10 +154,10 @@ for c in testset.select_dtypes(include=['object']).columns:
 # overwrite_input=False, method='linear', keepdims=False, *, interpolation=None)
 Q15 = trainset.quantile(0.15)
 Q85 = trainset.quantile(0.85)
-IQR = Q85 - Q15
+diff = Q85 - Q15
 
 # # Removal of outliers from dataset
-train_clean = trainset[~((trainset < (Q15 - 1.5 * IQR)) |(trainset > (Q85 + 1.5 * IQR))).any(axis=1)]
+train_clean = trainset[~((trainset < (Q15 - 1.5 * diff)) |(trainset > (Q85 + 1.5 * diff))).any(axis=1)]
 
 #Correlation Heatmap
 corr = train_clean.corr()
