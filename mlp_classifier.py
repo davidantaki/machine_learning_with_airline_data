@@ -1,10 +1,9 @@
 import itertools
-import matplotlib.pyplot as plt  # For general plotting
+import matplotlib.pyplot as plt
 import pandas
 import numpy as np
-# import Airline_Funct as af
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-from sklearn.model_selection import GridSearchCV, KFold
+from sklearn.model_selection import KFold
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
