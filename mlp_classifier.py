@@ -192,27 +192,43 @@ classes_str = ["neutral or dissatisfied", "satisfied"]
 classes_int = [0, 1]
 num_classes = len(classes_str)
 
+print(trainset_raw.columns)
+genders = np.unique(np.array(trainset_raw)[:,2])
+customer_type = np.unique(np.array(trainset_raw)[:,3])
+type_of_travel = np.unique(np.array(trainset_raw)[:,5])
+seat_class = np.unique(np.array(trainset_raw)[:,6])
+print(genders)
+print(customer_type)
+print(type_of_travel)
+print(seat_class)
+
 # Load training set
 trainset = trainset_raw
 # # Shuffle entire training set.
 # trainset = trainset.sample(frac=1)
-# print("trainset:\n{}".format(trainset))
+print("trainset:\n{}".format(trainset))
 # Get rid of useless columns
 del trainset["Unnamed: 0"]
 del trainset["id"]
-# TODO Convert these columns to integers
-del trainset["Gender"]
-del trainset["Customer Type"]
-del trainset["Type of Travel"]
-del trainset["Class"]
 # Convert string labels to integer labels corresponding to index of class_names
 trainset = trainset.replace(classes_str[0], value=classes_int[0], regex=True)
 trainset = trainset.replace(classes_str[1], value=classes_int[1], regex=True)
+# Replace other categorical data with numbers
+for i in range(0,len(genders)):
+    trainset = trainset.replace(genders[i], value=i, regex=True)
+for i in range(0,len(customer_type)):
+    trainset = trainset.replace(customer_type[i], value=i, regex=True)
+for i in range(0,len(type_of_travel)):
+    trainset = trainset.replace(type_of_travel[i], value=i, regex=True)
+for i in range(0,len(seat_class)):
+    trainset = trainset.replace(seat_class[i], value=i, regex=True)
 # Get list of feature names
 features = trainset.columns
 print(features)
 # Remove any sample with NULL value
 trainset = remove_null_samples(trainset)
+print(trainset)
+
 
 # Separate labels
 # Get last column which is the labels
@@ -234,14 +250,19 @@ testset = testset_raw
 # Get rid of useless columns
 del testset["Unnamed: 0"]
 del testset["id"]
-# TODO Convert these columns to integers
-del testset["Gender"]
-del testset["Customer Type"]
-del testset["Type of Travel"]
-del testset["Class"]
 # Convert string labels to integer labels corresponding to index of class_names
 testset = testset.replace(classes_str[0], value=classes_int[0], regex=True)
 testset = testset.replace(classes_str[1], value=classes_int[1], regex=True)
+# Replace other categorical data with numbers
+for i in range(0,len(genders)):
+    testset = testset.replace(genders[i], value=i, regex=True)
+for i in range(0,len(customer_type)):
+    testset = testset.replace(customer_type[i], value=i, regex=True)
+for i in range(0,len(type_of_travel)):
+    testset = testset.replace(type_of_travel[i], value=i, regex=True)
+for i in range(0,len(seat_class)):
+    testset = testset.replace(seat_class[i], value=i, regex=True)
+
 # Get list of feature names
 features = testset.columns
 print(features)
@@ -256,13 +277,11 @@ testset_y = testset[:, len(testset[0])-1]
 testset_x = np.delete(testset, len(testset[0])-1, axis=1)
 print("testset_x shape:\n{}".format(testset_x.shape))
 
-# testset_x = testset_x[:, 0:1]
-
 print("testset_y:\n{}".format(testset_y.shape))
 print("testset_x:\n{}".format(testset_x.shape))
 
 
-# Visualize Dataset
+# VISUALIZE DATASET
 # trainset_x_df = pandas.DataFrame(trainset_x, columns=features[0:18])
 # print(trainset_x_df)
 
@@ -276,12 +295,14 @@ print("testset_x:\n{}".format(testset_x.shape))
 # sns.pairplot(data=trainset_x_df)
 
 # NORMALIZE DATA/FEATURE SCALING
+# Visualize before scaling
 # plt.scatter(np.arange(0, len(trainset_x)), trainset_x[:, 0])
 # plt.show()
 scaler = preprocessing.StandardScaler().fit(trainset_x)
 trainset_x = scaler.transform(trainset_x)
 scaler = preprocessing.StandardScaler().fit(testset_x)
 testset_x = scaler.transform(testset_x)
+# Visualize after scaling
 # print([np.dtype(testset_x[0, i]) for i in range(0, 18)])
 # print([np.dtype(trainset_x[0, i]) for i in range(0, 18)])
 # plt.scatter(np.arange(0, len(trainset_x)), trainset_x[:, 0])
@@ -497,8 +518,7 @@ def demonstrate_underfitting_overfitting():
     criterion = nn.CrossEntropyLoss()
     model, training_loss_vs_epoch_k, validation_loss_vs_epoch_k = train_model(model, trainset_x, trainset_y, testset_x, testset_y, criterion,
                                                                               optimizer, num_epochs=epochs, plot=False, early_stopping=True)
-    # TODOL: Graph below with range of neurons
-    # Then try overfitting and adding weight decay to see if it reduces overfitting
+
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
     ax.plot(
         training_loss_vs_epoch_k[:, 0], training_loss_vs_epoch_k[:, 1], label="Training loss")
@@ -532,8 +552,7 @@ def train_final_model():
     criterion = nn.CrossEntropyLoss()
     model, training_loss_vs_epoch_k, validation_loss_vs_epoch_k = train_model(model, trainset_x, trainset_y, testset_x, testset_y, criterion,
                                                                               optimizer, num_epochs=num_epochs, plot=False, early_stopping=True)
-    # TODOL: Graph below with range of neurons
-    # Then try overfitting and adding weight decay to see if it reduces overfitting
+
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
     ax.scatter(
         training_loss_vs_epoch_k[:, 0], training_loss_vs_epoch_k[:, 1], label="Training loss")
