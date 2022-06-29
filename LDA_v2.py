@@ -178,9 +178,6 @@ features = X_train.loc[:,support].columns.tolist()
 perm = PermutationImportance(rf(n_estimators=100, random_state=0).fit(X_train,y_train),random_state=1).fit(X_train,y_train)
 show_weights(perm, feature_names = X_train.columns.tolist())
 
-Feature = ['Type_of_Travel','Inflight_wifi_service','Online_boarding','Seat_comfort','Flight_Distance',
-             'Inflight_entertainment','On-board_service','Leg_room_service','Cleanliness','Checkin_service', 
-              'Inflight_service', 'Baggage_handling']
 
 Verdict = ['satisfaction']
 
