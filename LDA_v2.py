@@ -95,28 +95,28 @@ testset['Class'] = testset['Class'].fillna(testset['Class'].mode()[0])
 # between a numerical and one or more categorical variables using one of several visual 
 # representations. The kind parameter selects the underlying axes-level function to use:
 
-graph = sns.catplot("satisfaction", col="Gender", col_wrap=2, data=trainset, kind="count") 
-plt.show()
+#graph = sns.catplot("satisfaction", col="Gender", col_wrap=2, data=trainset, kind="count") 
+#plt.show()
 
-graph = sns.catplot("satisfaction", col="Customer_Type", col_wrap=2, data=trainset, kind="count")
-plt.show()
+#graph = sns.catplot("satisfaction", col="Customer_Type", col_wrap=2, data=trainset, kind="count")
+#plt.show()
 
-graph = sns.catplot("satisfaction", col="Ease_of_Online_booking", col_wrap=6, data=trainset, kind="count")
-plt.show()
+#graph = sns.catplot("satisfaction", col="Ease_of_Online_booking", col_wrap=6, data=trainset, kind="count")
+#plt.show()
 
-graph = sns.catplot("satisfaction", col="Seat_comfort", col_wrap=6, data=trainset, kind="count")
-plt.show()
+#graph = sns.catplot("satisfaction", col="Seat_comfort", col_wrap=6, data=trainset, kind="count")
+#plt.show()
 
-graph = sns.catplot("satisfaction", col="Cleanliness", col_wrap=6, data=trainset, kind="count")
-plt.show()
+#graph = sns.catplot("satisfaction", col="Cleanliness", col_wrap=6, data=trainset, kind="count")
+#plt.show()
 
-graph = sns.catplot("satisfaction", col="Food_and_drink", col_wrap=6, data=trainset, kind="count")
-plt.show()
+#graph = sns.catplot("satisfaction", col="Food_and_drink", col_wrap=6, data=trainset, kind="count")
+#plt.show()
 
-graph = sns.catplot("Age", data=trainset, kind='count', hue='satisfaction', order=range(0, 100))
-graph.set_ylabels('Count')
-plt.title('Satisfaction vs. Age')
-plt.show()
+#graph = sns.catplot("Age", data=trainset, kind='count', hue='satisfaction', order=range(0, 100))
+#graph.set_ylabels('Count')
+#plt.title('Satisfaction vs. Age')
+#plt.show()
 
 
 
@@ -178,9 +178,6 @@ features = X_train.loc[:,support].columns.tolist()
 perm = PermutationImportance(rf(n_estimators=100, random_state=0).fit(X_train,y_train),random_state=1).fit(X_train,y_train)
 show_weights(perm, feature_names = X_train.columns.tolist())
 
-Feature = ['Type_of_Travel','Inflight_wifi_service','Online_boarding','Seat_comfort','Flight_Distance',
-             'Inflight_entertainment','On-board_service','Leg_room_service','Cleanliness','Checkin_service', 
-              'Inflight_service', 'Baggage_handling']
 
 Verdict = ['satisfaction']
 
