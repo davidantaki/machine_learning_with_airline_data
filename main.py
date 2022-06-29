@@ -28,14 +28,18 @@ class MLP(nn.Module):
         self.activation2 = nn.ReLU()
         self.output_fc = nn.Linear(hidden_dim, C)
         self.output_activation = nn.LogSoftmax(dim=1)
+        self.dropout = nn.Dropout(0.25)
 
     def forward(self, x):
         x = self.input(x)
         x = F.relu(x)
+        x = self.dropout(x)
         x = self.linear1(x)
         x = F.relu(x)
+        x = self.dropout(x)
         x = self.linear2(x)
         x = F.relu(x)
+        x = self.dropout(x)
         x = self.output_fc(x)
         # Don't need LogSoftMax if using CrossEntropyLoss
         # x = self.output_activation(x)
@@ -55,7 +59,13 @@ def model_predict(model, data):
     return np.argmax(predicted_labels, 1)
 
 
-def train_model(model, X_train, y_train, X_valid, y_valid, criterion, optimizer, num_epochs=25, plot=False):
+def train_model(model, X_train, y_train, X_valid, y_valid, criterion, optimizer, num_epochs=25, plot=False, early_stopping=False):
+    # Early stopping Params
+    last_loss = 100
+    patience = 4
+    threshold = 0.01
+    trigger_times = 0
+    min_epochs = 25
 
     # Apparently good practice to set this "flag" too before training
     # Does things like make sure Dropout layers are active, gradients are updated, etc.
@@ -73,7 +83,7 @@ def train_model(model, X_train, y_train, X_valid, y_valid, criterion, optimizer,
     validation_loss_vs_epoch = []
 
     for epoch in range(num_epochs):
-        print(f"Epoch: {epoch}")
+
         # TRAIN STEP
         model.train()
         # Set grads to zero explicitly before backprop
@@ -94,6 +104,27 @@ def train_model(model, X_train, y_train, X_valid, y_valid, criterion, optimizer,
         valid_loss = criterion(y_valid_pred, y_valid)
         validation_loss_vs_epoch.append(
             [epoch, valid_loss.cpu().detach().numpy()])
+
+        # EARLY STOPPING
+        if early_stopping:
+            if not epoch < min_epochs and (valid_loss.item() > last_loss
+                                           or np.abs(valid_loss.item() - train_loss.item()) > threshold
+                                           or valid_loss.item() == np.nan):
+                trigger_times += 1
+                print('Trigger Times:', trigger_times)
+                if trigger_times >= patience:
+                    print('Early stopping!\nStart to test process.')
+                    training_loss_vs_epoch = np.array(training_loss_vs_epoch)
+                    validation_loss_vs_epoch = np.array(
+                        validation_loss_vs_epoch)
+                    return model, training_loss_vs_epoch, validation_loss_vs_epoch
+            else:
+                print('trigger times: 0')
+                trigger_times = 0
+
+            last_loss = valid_loss.item()
+
+        print(f"Epoch: {epoch}/{num_epochs}, train_loss: {train_loss.cpu().detach().numpy()}, valid_loss: {valid_loss.cpu().detach().numpy()}")
 
     # Plot loss vs epoch
     training_loss_vs_epoch = np.array(training_loss_vs_epoch)
@@ -354,12 +385,13 @@ def grid_search_cv():
     # Permanent Hyperparams
     input_dim = trainset_x.shape[1]
     output_dim = num_classes
-    k_folds = 10
+    k_folds = 5
     # Params to try for Cross validation
-    n_hidden_neurons = [256, 300, 512, 1028]
-    lr = [.1, .2, .3]
-    momentum = [0.99]
-    num_epochs = [200]
+    n_hidden_neurons_list = [512]
+    lr_list = [.1, .3]
+    # lr_list = [.1, .2, .3, .4, .5, .6, .7, .8, .9, .99]
+    momentum_list = [0.99]
+    num_epochs_list = [200]
 
     # n_hidden_neurons = [2, 256]
     # lr = [.01]
@@ -368,7 +400,7 @@ def grid_search_cv():
 
     # Get grid of all param combinations
     params_grid = generate_hyper_params_grid(
-        [n_hidden_neurons, lr, momentum, num_epochs])
+        [n_hidden_neurons_list, lr_list, momentum_list, num_epochs_list])
 
     # For Plotting Results
     print(len(params_grid))
@@ -427,6 +459,17 @@ def grid_search_cv():
 
         param_counter = param_counter + 1
 
+    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+    ax.scatter(
+        np.array(lr_list), np.array(grid_search_scores))
+    ax.legend()
+    ax.set_xlabel("Learning Rate")
+    ax.set_ylabel("CV Score/Accuracy (higher=better)")
+    ax.set_title(
+        f"Accuracy vs. Learning Rate")
+    # ax.set_ylim((0, 1))
+    plt.show()
+
     grid_search_scores = np.array(grid_search_scores)
     print(f"grid_search_scores:\n {grid_search_scores}")
     optimal_params = params_grid[np.argmax(grid_search_scores)]
@@ -434,18 +477,18 @@ def grid_search_cv():
     plt.show()
 
 
-def demonstrate_underfitting():
+def demonstrate_underfitting_overfitting():
     global trainset_x
     global trainset_y
-    trainset_x = trainset_x[0:100, :]
-    trainset_y = trainset_y[0:100]
+    trainset_x = trainset_x[0:5000, :]
+    trainset_y = trainset_y[0:5000]
     # Hyperparams
     input_dim = trainset_x.shape[1]
     output_dim = num_classes
-    neurons = 2
+    neurons = 128
     lr = 0.1
-    momentum = 0.9
-    epochs = 1000
+    momentum = 0.99
+    epochs = 500
 
     model = MLP(input_dim, output_dim, neurons).to(
         torch.device('cuda'))
@@ -457,9 +500,9 @@ def demonstrate_underfitting():
     # TODOL: Graph below with range of neurons
     # Then try overfitting and adding weight decay to see if it reduces overfitting
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
-    ax.scatter(
+    ax.plot(
         training_loss_vs_epoch_k[:, 0], training_loss_vs_epoch_k[:, 1], label="Training loss")
-    ax.scatter(
+    ax.plot(
         validation_loss_vs_epoch_k[:, 0], validation_loss_vs_epoch_k[:, 1], label="Test loss")
     ax.legend()
     ax.set_xlabel("Epoch")
@@ -472,23 +515,23 @@ def demonstrate_underfitting():
     print(classification_report(testset_y, testset_y_pred))
     plt.show()
 
+
 def train_final_model():
     # Cross Validation selected params:
     input_dim = trainset_x.shape[1]
-    n_hidden_neurons = 1028
+    n_hidden_neurons = 512
     output_dim = num_classes
     lr = 0.3
     num_epochs = 200
-    momentum = 0.9
-
+    momentum = 0.99
 
     model = MLP(input_dim, output_dim, n_hidden_neurons).to(
         torch.device('cuda'))
     optimizer = torch.optim.SGD(
-        model.parameters(), lr=lr, momentum=momentum, )
+        model.parameters(), lr=lr, momentum=momentum)
     criterion = nn.CrossEntropyLoss()
     model, training_loss_vs_epoch_k, validation_loss_vs_epoch_k = train_model(model, trainset_x, trainset_y, testset_x, testset_y, criterion,
-                                                                              optimizer, num_epochs=num_epochs, plot=False)
+                                                                              optimizer, num_epochs=num_epochs, plot=False, early_stopping=True)
     # TODOL: Graph below with range of neurons
     # Then try overfitting and adding weight decay to see if it reduces overfitting
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
@@ -507,12 +550,8 @@ def train_final_model():
     print(classification_report(testset_y, testset_y_pred))
     plt.show()
 
-import sys
+
 if __name__ == "__main__":
-    # demonstrate_underfitting()
+    # demonstrate_underfitting_overfitting()
     # grid_search_cv()
     train_final_model()
-
-
-
-
