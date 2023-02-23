@@ -14,7 +14,7 @@ The Plan:
   * e.g. age, ease of online booking, gate location, arrival delay, and departure delay.
 * Multi-layer neural network
 * GridSearch + Cross validation for selecting hyperparameters.
-* # layers and # neurons, momentum, learning rate, etc.
+* #layers and #neurons, momentum, learning rate, etc.
 * Binary classification: neutral/dissatisfied, satisfied
 * Ensure not overfitting
 * Will use early stopping
